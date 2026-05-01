@@ -10,6 +10,47 @@ from ai_pr_reviewer.github import PullRequestFile
 
 MAX_PATCH_CHARS = 120_000
 
+REVIEWER_SYSTEM_PROMPT = """# Identity
+
+You are an expert pull request reviewer. Your job is to find defects that a strong human reviewer would want fixed before merge.
+
+# Review Priorities
+
+Prioritize issues in this order:
+1. Correctness bugs, broken behavior, data loss, race conditions, and edge cases.
+2. Security issues, including injection, authorization, authentication, secret handling, unsafe deserialization, and path traversal.
+3. Reliability issues, including missing error handling, resource leaks, retries, timeouts, and concurrency hazards.
+4. API, schema, migration, and compatibility risks introduced by the diff.
+5. Missing or insufficient tests only when the diff changes meaningful behavior or fixes a bug without regression coverage.
+
+# Review Rules
+
+- Review only the provided pull request diff.
+- Comment only on concrete, actionable issues supported by the diff.
+- Do not report speculative issues, personal preferences, broad refactors, formatting nits, or praise.
+- Do not ask questions unless the answer is required to determine whether the diff is safe.
+- Prefer a small number of high-confidence findings over many weak comments.
+- Think privately before answering, but do not include reasoning traces or chain-of-thought in the output.
+- If no actionable issues are present, return an empty findings array and say that no blocking issues were found.
+
+# Output Contract
+
+Return strict JSON only. Do not wrap the JSON in Markdown. Use this exact shape:
+
+{
+  "summary": "Brief, factual review summary. Mention if no actionable issues were found.",
+  "findings": [
+    {
+      "path": "relative/file/path",
+      "line": 123,
+      "severity": "critical|high|medium|low",
+      "message": "Actionable comment for this exact changed line. Explain impact and the smallest useful fix."
+    }
+  ]
+}
+
+Each finding must reference a changed added line from the diff. Keep each message under 500 characters."""
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -27,31 +68,17 @@ class ReviewResult:
 
 def build_review_prompt(files: list[PullRequestFile]) -> str:
     diff = build_diff_payload(files)
-    return f"""Review this GitHub pull request diff as a senior software engineer.
+    return f"""<task>
+Review the pull request diff below and return the JSON review result described by the system instructions.
+</task>
 
-Focus on correctness, security, reliability, maintainability, and missing tests. Only report concrete issues that are visible in the diff. Do not nitpick style. Do not praise the code.
+<line_number_rules>
+Use only file paths and added line numbers from this diff. Inline comments that refer to deleted, unchanged, or unavailable lines will be discarded.
+</line_number_rules>
 
-Return strict JSON only, with this exact shape:
-{{
-  "summary": "Brief review summary. Mention if no actionable issues were found.",
-  "findings": [
-    {{
-      "path": "relative/file/path",
-      "line": 123,
-      "severity": "critical|high|medium|low",
-      "message": "Actionable comment for this exact changed line."
-    }}
-  ]
-}}
-
-Rules:
-- Use only line numbers from added lines in the provided diff.
-- Keep messages under 500 characters.
-- Prefer fewer, higher-confidence findings.
-- If there are no concrete issues, return an empty findings array.
-
-Diff:
+<diff>
 {diff}
+</diff>
 """
 
 
@@ -63,9 +90,10 @@ def build_diff_payload(files: list[PullRequestFile]) -> str:
         if not file.patch:
             continue
         section = (
-            f"\n--- FILE: {file.filename}\n"
-            f"status={file.status} additions={file.additions} deletions={file.deletions} changes={file.changes}\n"
-            f"{file.patch}\n"
+            f"\n<file path={json.dumps(file.filename)} status={json.dumps(file.status)} "
+            f"additions={file.additions} deletions={file.deletions} changes={file.changes}>\n"
+            f"```diff\n{file.patch}\n```\n"
+            "</file>\n"
         )
         if len(section) > remaining:
             parts.append(section[:remaining])

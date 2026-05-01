@@ -1,7 +1,10 @@
 import unittest
+from unittest.mock import patch
 
+from ai_pr_reviewer.config import _reasoning_effort_env, _reasoning_parameter_env
 from ai_pr_reviewer.github import PullRequestFile, parse_added_lines
-from ai_pr_reviewer.review import filter_findings_for_changed_lines, parse_review_response
+from ai_pr_reviewer.llm import build_chat_completion_request
+from ai_pr_reviewer.review import build_review_prompt, filter_findings_for_changed_lines, parse_review_response
 
 
 class ReviewParsingTests(unittest.TestCase):
@@ -72,6 +75,56 @@ class ReviewParsingTests(unittest.TestCase):
 
         self.assertEqual(len(filtered.findings), 1)
         self.assertEqual(filtered.findings[0].line, 10)
+
+    def test_review_prompt_uses_structured_diff_boundaries(self) -> None:
+        file = PullRequestFile(
+            filename="app.py",
+            status="modified",
+            additions=1,
+            deletions=0,
+            changes=1,
+            patch="""@@ -1 +1 @@
++new code
+""",
+        )
+
+        prompt = build_review_prompt([file])
+
+        self.assertIn("<task>", prompt)
+        self.assertIn('<file path="app.py"', prompt)
+        self.assertIn("```diff", prompt)
+
+    def test_reasoning_effort_accepts_supported_values(self) -> None:
+        with patch.dict("os.environ", {"AI_REASONING_EFFORT": "HIGH"}):
+            self.assertEqual(_reasoning_effort_env("AI_REASONING_EFFORT"), "high")
+
+    def test_reasoning_effort_rejects_unknown_values(self) -> None:
+        with patch.dict("os.environ", {"AI_REASONING_EFFORT": "maximum"}):
+            with self.assertRaises(ValueError):
+                _reasoning_effort_env("AI_REASONING_EFFORT")
+
+    def test_reasoning_parameter_defaults_to_openai_style_reasoning_object(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(_reasoning_parameter_env("AI_REASONING_PARAMETER"), "reasoning")
+
+    def test_reasoning_parameter_rejects_unknown_values(self) -> None:
+        with patch.dict("os.environ", {"AI_REASONING_PARAMETER": "header"}):
+            with self.assertRaises(ValueError):
+                _reasoning_parameter_env("AI_REASONING_PARAMETER")
+
+    def test_chat_request_uses_reasoning_object_by_default(self) -> None:
+        request = build_chat_completion_request("model", "system", "user", 100, "medium")
+
+        self.assertEqual(request["reasoning"], {"effort": "medium"})
+        self.assertNotIn("reasoning_effort", request)
+        self.assertNotIn("extra_body", request)
+
+    def test_chat_request_can_use_reasoning_effort_field_for_compatible_providers(self) -> None:
+        request = build_chat_completion_request("model", "system", "user", 100, "high", "reasoning_effort")
+
+        self.assertEqual(request["reasoning_effort"], "high")
+        self.assertNotIn("reasoning", request)
+        self.assertNotIn("extra_body", request)
 
 
 if __name__ == "__main__":

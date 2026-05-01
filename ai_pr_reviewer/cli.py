@@ -7,7 +7,13 @@ import sys
 from ai_pr_reviewer.config import load_config
 from ai_pr_reviewer.github import GitHubClient
 from ai_pr_reviewer.llm import ReviewModel
-from ai_pr_reviewer.review import build_github_review, build_review_prompt, filter_findings_for_changed_lines, parse_review_response
+from ai_pr_reviewer.review import (
+    REVIEWER_SYSTEM_PROMPT,
+    build_github_review,
+    build_review_prompt,
+    filter_findings_for_changed_lines,
+    parse_review_response,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,8 +32,15 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         prompt = build_review_prompt(files)
-        model = ReviewModel(config.api_key, config.base_url, config.model, config.max_tokens)
-        raw_review = model.review(prompt)
+        model = ReviewModel(
+            config.api_key,
+            config.base_url,
+            config.model,
+            config.max_tokens,
+            config.reasoning_effort,
+            config.reasoning_parameter,
+        )
+        raw_review = model.review(REVIEWER_SYSTEM_PROMPT, prompt)
         review = filter_findings_for_changed_lines(parse_review_response(raw_review), files)
         body, comments = build_github_review(review)
 

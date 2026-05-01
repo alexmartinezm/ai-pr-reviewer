@@ -5,6 +5,9 @@ from dataclasses import dataclass
 
 
 DEFAULT_MAX_TOKENS = 4000
+REASONING_EFFORT_VALUES = {"none", "minimal", "low", "medium", "high", "xhigh"}
+REASONING_PARAMETER_VALUES = {"reasoning", "reasoning_effort"}
+DEFAULT_REASONING_PARAMETER = "reasoning"
 
 
 @dataclass(frozen=True)
@@ -15,6 +18,8 @@ class Config:
     api_key: str
     model: str
     base_url: str | None = None
+    reasoning_effort: str | None = None
+    reasoning_parameter: str = DEFAULT_REASONING_PARAMETER
     max_tokens: int = DEFAULT_MAX_TOKENS
     dry_run: bool = False
 
@@ -39,6 +44,8 @@ def load_config() -> Config:
         api_key=_required_env("AI_API_KEY"),
         model=_required_env("AI_MODEL"),
         base_url=_optional_env("AI_BASE_URL"),
+        reasoning_effort=_reasoning_effort_env("AI_REASONING_EFFORT"),
+        reasoning_parameter=_reasoning_parameter_env("AI_REASONING_PARAMETER"),
         max_tokens=_int_env("AI_MAX_TOKENS", DEFAULT_MAX_TOKENS),
         dry_run=_bool_env("AI_REVIEW_DRY_RUN"),
     )
@@ -84,6 +91,30 @@ def _int_env(name: str, default: int) -> int:
     if not value:
         return default
     return int(value)
+
+
+def _reasoning_effort_env(name: str) -> str | None:
+    value = _optional_env(name)
+    if value is None:
+        return None
+
+    normalized = value.lower()
+    if normalized not in REASONING_EFFORT_VALUES:
+        allowed = ", ".join(sorted(REASONING_EFFORT_VALUES))
+        raise ValueError(f"{name} must be one of: {allowed}")
+    return normalized
+
+
+def _reasoning_parameter_env(name: str) -> str:
+    value = _optional_env(name)
+    if value is None:
+        return DEFAULT_REASONING_PARAMETER
+
+    normalized = value.lower()
+    if normalized not in REASONING_PARAMETER_VALUES:
+        allowed = ", ".join(sorted(REASONING_PARAMETER_VALUES))
+        raise ValueError(f"{name} must be one of: {allowed}")
+    return normalized
 
 
 def _bool_env(name: str) -> bool:

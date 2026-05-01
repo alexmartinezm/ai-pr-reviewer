@@ -32,4 +32,6 @@ jobs:
           AI_BASE_URL: ${{ vars.AI_BASE_URL }}
           AI_MODEL: ${{ vars.AI_MODEL }}
           AI_MAX_TOKENS: ${{ vars.AI_MAX_TOKENS || '4000' }}
+          AI_REASONING_EFFORT: ${{ vars.AI_REASONING_EFFORT }}
+          AI_REASONING_PARAMETER: ${{ vars.AI_REASONING_PARAMETER }}
         run: ai-pr-reviewer

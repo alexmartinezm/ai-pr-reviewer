@@ -22,6 +22,8 @@ Optional values:
 
 - `AI_BASE_URL`: OpenAI-compatible API base URL. Leave unset to use the OpenAI SDK default.
 - `AI_MAX_TOKENS`: defaults to `4000`.
+- `AI_REASONING_EFFORT`: optional reasoning effort for models/providers that support it.
+- `AI_REASONING_PARAMETER`: optional request body shape for reasoning effort. Defaults to `reasoning`.
 
 ## What It Does
 
@@ -75,6 +77,8 @@ Optional repository variables:
 
 - `AI_BASE_URL`: API base URL. Leave unset to use the OpenAI SDK default.
 - `AI_MAX_TOKENS`: max response tokens. Defaults to `4000`.
+- `AI_REASONING_EFFORT`: opt-in reasoning effort. Supported values are `none`, `minimal`, `low`, `medium`, `high`, and `xhigh`.
+- `AI_REASONING_PARAMETER`: reasoning request body shape. Supported values are `reasoning` and `reasoning_effort`. Defaults to `reasoning`.
 
 The workflow is already included at `.github/workflows/ai-pr-review.yml`.
 
@@ -117,6 +121,8 @@ export PR_NUMBER="123"
 export AI_API_KEY="your_api_key"
 export AI_BASE_URL="https://api.example.com/v1"
 export AI_MODEL="your-model-name"
+export AI_REASONING_EFFORT="medium"
+export AI_REASONING_PARAMETER="reasoning"
 
 ai-pr-reviewer --dry-run
 ```
@@ -140,7 +146,70 @@ Environment variables:
 - `AI_BASE_URL`: optional OpenAI-compatible API base URL.
 - `AI_MODEL`: required model name.
 - `AI_MAX_TOKENS`: optional max response tokens.
+- `AI_REASONING_EFFORT`: optional reasoning effort for models/providers that support it. Supported values are `none`, `minimal`, `low`, `medium`, `high`, and `xhigh`.
+- `AI_REASONING_PARAMETER`: optional request body shape for reasoning effort. Use `reasoning` for OpenAI-style APIs or `reasoning_effort` for providers that explicitly document that field.
 - `AI_REVIEW_DRY_RUN`: set to `true` to print the review payload instead of posting it.
+
+## Prompt Design
+
+The reviewer uses a curated prompt split into two parts:
+
+- A system prompt with durable reviewer identity, review priorities, hard rules, and the JSON output contract.
+- A user prompt containing the current PR diff wrapped in XML-like tags to make file boundaries and task context explicit.
+
+The prompt is intentionally strict:
+
+- It prioritizes correctness, security, reliability, compatibility, and meaningful missing tests.
+- It asks for fewer high-confidence findings instead of many speculative comments.
+- It forbids style nits, praise, broad refactors, and unsupported guesses.
+- It tells the model to think privately but return only strict JSON.
+- It requires each finding to reference an added line in the diff; the application also validates this before posting inline comments.
+
+## Reasoning Effort
+
+`AI_REASONING_EFFORT` is opt-in because support is model and provider dependent.
+
+When set, the value is sent directly in the Chat Completions request body. The default body shape is OpenAI-style:
+
+```json
+{
+  "reasoning": {
+    "effort": "medium"
+  }
+}
+```
+
+Some OpenAI-compatible providers document a flat field instead. For those providers, set `AI_REASONING_PARAMETER=reasoning_effort` to send:
+
+```json
+{
+  "reasoning_effort": "medium"
+}
+```
+
+Do not use headers for reasoning effort. This is request-body model configuration, not transport metadata.
+
+Recommended starting points:
+
+- `low`: faster reviews with modest reasoning.
+- `medium`: balanced quality, latency, and cost.
+- `high`: deeper review for security-sensitive or high-value repositories.
+
+Use higher values only if your provider supports them and the added latency/cost is worthwhile.
+
+## Sources Used For Prompt Improvements
+
+- OpenAI Prompt Engineering: recommends clear role separation, explicit instructions, examples/output contracts, and Markdown/XML-style boundaries for prompt sections and context.
+- OpenAI Reasoning Models: describes reasoning effort as a tuning knob with provider/model-dependent values, plus the tradeoff between quality, latency, and token usage.
+- GitHub REST API Pull Request Reviews: documents creating grouped PR reviews, inline review comments, `line`, `side`, `path`, and the `COMMENT` review event.
+- GitHub Copilot Code Review docs: reinforces using comment-only AI reviews, actionable inline comments, and repository-level custom review guidance patterns.
+
+Reference links:
+
+- https://platform.openai.com/docs/guides/prompt-engineering
+- https://platform.openai.com/docs/guides/reasoning
+- https://docs.github.com/en/rest/pulls/reviews?apiVersion=2022-11-28#create-a-review-for-a-pull-request
+- https://docs.github.com/en/copilot/using-github-copilot/code-review/using-copilot-code-review
 
 ## Development
 
