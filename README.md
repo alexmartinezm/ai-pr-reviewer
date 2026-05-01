@@ -2,6 +2,38 @@
 
 AI PR Reviewer is a GitHub Action that reviews pull request diffs with an OpenAI-compatible model API and posts a GitHub pull request review with a summary plus inline comments.
 
+## Recommended Setup: Agent Skill
+
+This repository includes an agent skill that installs AI PR Reviewer into existing repositories. Recommended flow:
+
+- Skill: `agent-skills/install-ai-pr-reviewer`
+- Add the skill to your agent.
+- Open the target repository with your agent.
+- Ask the agent to use `install-ai-pr-reviewer` for that repository.
+- The skill copies the required reviewer package and GitHub workflow.
+- The skill updates an existing `pyproject.toml` without overwriting it.
+- The skill reports the required GitHub secret, variables, and workflow permissions.
+
+For local agent usage, symlink the skill into your agent skills directory:
+
+```bash
+ln -s /path/to/ai-pr-reviewer/agent-skills/install-ai-pr-reviewer ~/.claude/skills/install-ai-pr-reviewer
+```
+
+Then, from the target repository, ask your agent:
+
+```text
+Use the install-ai-pr-reviewer skill to set up AI PR Reviewer in this repository.
+```
+
+The skill wraps the installer script internally. You usually do not need to run the script directly, but it is available at:
+
+```bash
+agent-skills/install-ai-pr-reviewer/scripts/install-ai-pr-reviewer.py
+```
+
+Manual setup is still documented below if you prefer to copy files yourself.
+
 The model client uses the OpenAI SDK and can target OpenAI or any OpenAI-compatible API:
 
 ```python
