@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 
@@ -54,16 +55,22 @@ def load_config() -> Config:
 def _pull_request_number() -> int:
     value = os.getenv("PR_NUMBER") or os.getenv("GITHUB_EVENT_PULL_REQUEST_NUMBER")
     if value:
-        return int(value)
+        try:
+            return int(value.strip())
+        except ValueError:
+            raise ValueError(f"PR_NUMBER is not a valid integer: {value!r}")
 
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path:
         raise ValueError("Set PR_NUMBER or run inside a pull_request GitHub Actions event")
 
-    import json
-
-    with open(event_path, "r", encoding="utf-8") as event_file:
-        event = json.load(event_file)
+    try:
+        with open(event_path, "r", encoding="utf-8") as event_file:
+            event = json.load(event_file)
+    except OSError as exc:
+        raise ValueError(f"Could not read GITHUB_EVENT_PATH={event_path!r}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"GITHUB_EVENT_PATH contains invalid JSON: {exc}") from exc
 
     pull_request = event.get("pull_request") or {}
     number = pull_request.get("number") or event.get("number")
@@ -88,9 +95,12 @@ def _optional_env(name: str) -> str | None:
 
 def _int_env(name: str, default: int) -> int:
     value = os.getenv(name)
-    if not value:
+    if not value or not value.strip():
         return default
-    return int(value)
+    try:
+        return int(value.strip())
+    except ValueError:
+        raise ValueError(f"{name} must be an integer, got: {value!r}")
 
 
 def _reasoning_effort_env(name: str) -> str | None:
@@ -118,4 +128,4 @@ def _reasoning_parameter_env(name: str) -> str:
 
 
 def _bool_env(name: str) -> bool:
-    return os.getenv(name, "").lower() in {"1", "true", "yes", "on"}
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}

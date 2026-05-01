@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -131,6 +132,7 @@ def parse_added_lines(patch: str) -> set[int]:
 
 
 def _parse_hunk_start(line: str) -> int:
-    marker = line.split(" ")[2]
-    start = marker.split(",", 1)[0].lstrip("+")
-    return int(start)
+    match = re.search(r"\+(\d+)", line)
+    if not match:
+        raise ValueError(f"Unparseable hunk header: {line!r}")
+    return int(match.group(1))
