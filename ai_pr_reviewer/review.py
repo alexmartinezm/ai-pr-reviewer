@@ -96,6 +96,7 @@ def build_diff_payload(files: list[PullRequestFile]) -> str:
             "</file>\n"
         )
         if len(section) > remaining:
+            parts.append(section[:remaining])
             parts.append("\n[Diff truncated due to size]\n")
             break
         parts.append(section)

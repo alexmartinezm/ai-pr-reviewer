@@ -4,7 +4,7 @@ from unittest.mock import patch
 from ai_pr_reviewer.config import _reasoning_effort_env, _reasoning_parameter_env
 from ai_pr_reviewer.github import PullRequestFile, parse_added_lines, parse_diff_lines
 from ai_pr_reviewer.llm import build_chat_completion_request
-from ai_pr_reviewer.review import build_review_prompt, filter_findings_for_changed_lines, parse_review_response
+from ai_pr_reviewer.review import build_diff_payload, build_review_prompt, filter_findings_for_changed_lines, parse_review_response
 
 
 class ReviewParsingTests(unittest.TestCase):
@@ -105,6 +105,22 @@ class ReviewParsingTests(unittest.TestCase):
         self.assertIn('<file path="app.py"', prompt)
         self.assertIn("```diff", prompt)
 
+    def test_diff_payload_preserves_partial_section_when_truncated(self) -> None:
+        file = PullRequestFile(
+            filename="app.py",
+            status="modified",
+            additions=1,
+            deletions=0,
+            changes=1,
+            patch="+" * 130_000,
+        )
+
+        payload = build_diff_payload([file])
+
+        self.assertEqual(len(payload), 120_030)
+        self.assertTrue(payload.startswith('\n<file path="app.py"'))
+        self.assertTrue(payload.endswith("\n[Diff truncated due to size]\n"))
+
     def test_reasoning_effort_accepts_supported_values(self) -> None:
         with patch.dict("os.environ", {"AI_REASONING_EFFORT": "HIGH"}):
             self.assertEqual(_reasoning_effort_env("AI_REASONING_EFFORT"), "high")
@@ -136,6 +152,11 @@ class ReviewParsingTests(unittest.TestCase):
         self.assertEqual(request["extra_body"], {"reasoning_effort": "high"})
         self.assertNotIn("reasoning", request)
         self.assertNotIn("reasoning_effort", request)
+
+    def test_chat_request_does_not_force_temperature_without_reasoning_effort(self) -> None:
+        request = build_chat_completion_request("model", "system", "user", 100)
+
+        self.assertNotIn("temperature", request)
 
 
 if __name__ == "__main__":

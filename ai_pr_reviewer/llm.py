@@ -64,7 +64,5 @@ def build_chat_completion_request(
         request["extra_body"] = {"reasoning": {"effort": reasoning_effort}}
     elif reasoning_effort and reasoning_parameter == "reasoning_effort":
         request["extra_body"] = {"reasoning_effort": reasoning_effort}
-    else:
-        request["temperature"] = 0.1
 
     return request
