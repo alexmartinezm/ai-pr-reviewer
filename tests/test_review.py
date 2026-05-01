@@ -2,9 +2,9 @@ import unittest
 from unittest.mock import patch
 
 from ai_pr_reviewer.config import _reasoning_effort_env, _reasoning_parameter_env
-from ai_pr_reviewer.github import PullRequestFile, parse_added_lines
+from ai_pr_reviewer.github import PullRequestFile, parse_added_lines, parse_diff_lines
 from ai_pr_reviewer.llm import build_chat_completion_request
-from ai_pr_reviewer.review import build_review_prompt, filter_findings_for_changed_lines, parse_review_response
+from ai_pr_reviewer.review import build_diff_payload, build_review_prompt, filter_findings_for_changed_lines, parse_review_response
 
 
 class ReviewParsingTests(unittest.TestCase):
@@ -28,6 +28,16 @@ class ReviewParsingTests(unittest.TestCase):
 
         self.assertEqual(parse_added_lines(patch), {1, 2})
 
+    def test_parse_diff_lines_includes_context_and_added(self) -> None:
+        patch = """@@ -1,4 +1,5 @@
+ context
+-old line
++new line
+ another context
++second new line
+"""
+        self.assertEqual(parse_diff_lines(patch), {1, 2, 3, 4})
+
     def test_parse_review_response_accepts_fenced_json(self) -> None:
         result = parse_review_response(
             """```json
@@ -49,7 +59,7 @@ class ReviewParsingTests(unittest.TestCase):
         self.assertEqual(len(result.findings), 1)
         self.assertEqual(result.findings[0].severity, "high")
 
-    def test_filter_findings_keeps_only_added_lines(self) -> None:
+    def test_filter_findings_keeps_diff_visible_lines(self) -> None:
         file = PullRequestFile(
             filename="app.py",
             status="modified",
@@ -65,16 +75,17 @@ class ReviewParsingTests(unittest.TestCase):
             """{
   "summary": "Review complete.",
   "findings": [
-    {"path": "app.py", "line": 9, "severity": "low", "message": "context"},
-    {"path": "app.py", "line": 10, "severity": "medium", "message": "added"}
+    {"path": "app.py", "line": 9, "severity": "low", "message": "context line"},
+    {"path": "app.py", "line": 10, "severity": "medium", "message": "added line"},
+    {"path": "app.py", "line": 99, "severity": "high", "message": "not in diff"}
   ]
 }"""
         )
 
         filtered = filter_findings_for_changed_lines(result, [file])
 
-        self.assertEqual(len(filtered.findings), 1)
-        self.assertEqual(filtered.findings[0].line, 10)
+        self.assertEqual(len(filtered.findings), 2)
+        self.assertEqual({f.line for f in filtered.findings}, {9, 10})
 
     def test_review_prompt_uses_structured_diff_boundaries(self) -> None:
         file = PullRequestFile(
@@ -93,6 +104,22 @@ class ReviewParsingTests(unittest.TestCase):
         self.assertIn("<task>", prompt)
         self.assertIn('<file path="app.py"', prompt)
         self.assertIn("```diff", prompt)
+
+    def test_diff_payload_preserves_partial_section_when_truncated(self) -> None:
+        file = PullRequestFile(
+            filename="app.py",
+            status="modified",
+            additions=1,
+            deletions=0,
+            changes=1,
+            patch="+" * 130_000,
+        )
+
+        payload = build_diff_payload([file])
+
+        self.assertEqual(len(payload), 120_030)
+        self.assertTrue(payload.startswith('\n<file path="app.py"'))
+        self.assertTrue(payload.endswith("\n[Diff truncated due to size]\n"))
 
     def test_reasoning_effort_accepts_supported_values(self) -> None:
         with patch.dict("os.environ", {"AI_REASONING_EFFORT": "HIGH"}):
@@ -125,6 +152,11 @@ class ReviewParsingTests(unittest.TestCase):
         self.assertEqual(request["extra_body"], {"reasoning_effort": "high"})
         self.assertNotIn("reasoning", request)
         self.assertNotIn("reasoning_effort", request)
+
+    def test_chat_request_does_not_force_temperature_without_reasoning_effort(self) -> None:
+        request = build_chat_completion_request("model", "system", "user", 100)
+
+        self.assertNotIn("temperature", request)
 
 
 if __name__ == "__main__":

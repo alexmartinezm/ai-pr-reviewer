@@ -58,7 +58,6 @@ def build_chat_completion_request(
             {"role": "user", "content": user_prompt},
         ],
         "max_tokens": max_tokens,
-        "temperature": 0.1,
     }
 
     if reasoning_effort and reasoning_parameter == "reasoning":
