@@ -62,8 +62,8 @@ def build_chat_completion_request(
     }
 
     if reasoning_effort and reasoning_parameter == "reasoning":
-        request["reasoning"] = {"effort": reasoning_effort}
+        request["extra_body"] = {"reasoning": {"effort": reasoning_effort}}
     elif reasoning_effort and reasoning_parameter == "reasoning_effort":
-        request["reasoning_effort"] = reasoning_effort
+        request["extra_body"] = {"reasoning_effort": reasoning_effort}
 
     return request

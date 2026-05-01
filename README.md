@@ -201,7 +201,9 @@ The prompt is intentionally strict:
 
 `AI_REASONING_EFFORT` is opt-in because support is model and provider dependent.
 
-When set, the value is sent directly in the Chat Completions request body. The default body shape is OpenAI-style:
+When set, the value is sent as an additional JSON body field through the OpenAI Python SDK `extra_body` option. This avoids passing unsupported Python keyword arguments to `chat.completions.create()` while still producing the intended request body.
+
+The default body shape is OpenAI-style:
 
 ```json
 {

@@ -115,16 +115,16 @@ class ReviewParsingTests(unittest.TestCase):
     def test_chat_request_uses_reasoning_object_by_default(self) -> None:
         request = build_chat_completion_request("model", "system", "user", 100, "medium")
 
-        self.assertEqual(request["reasoning"], {"effort": "medium"})
+        self.assertEqual(request["extra_body"], {"reasoning": {"effort": "medium"}})
+        self.assertNotIn("reasoning", request)
         self.assertNotIn("reasoning_effort", request)
-        self.assertNotIn("extra_body", request)
 
     def test_chat_request_can_use_reasoning_effort_field_for_compatible_providers(self) -> None:
         request = build_chat_completion_request("model", "system", "user", 100, "high", "reasoning_effort")
 
-        self.assertEqual(request["reasoning_effort"], "high")
+        self.assertEqual(request["extra_body"], {"reasoning_effort": "high"})
         self.assertNotIn("reasoning", request)
-        self.assertNotIn("extra_body", request)
+        self.assertNotIn("reasoning_effort", request)
 
 
 if __name__ == "__main__":
