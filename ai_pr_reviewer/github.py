@@ -22,6 +22,10 @@ class PullRequestFile:
     def changed_lines(self) -> set[int]:
         return parse_added_lines(self.patch)
 
+    @property
+    def diff_lines(self) -> set[int]:
+        return parse_diff_lines(self.patch)
+
 
 class GitHubClient:
     def __init__(self, token: str, owner: str, repo: str, api_url: str = "https://api.github.com") -> None:
@@ -126,6 +130,30 @@ def parse_added_lines(patch: str) -> set[int]:
         elif line.startswith("\\"):
             continue
         else:
+            new_line_number += 1
+
+    return lines
+
+
+def parse_diff_lines(patch: str) -> set[int]:
+    """Return all line numbers visible in the diff (context + added) in the new file."""
+    lines: set[int] = set()
+    new_line_number: int | None = None
+
+    for line in patch.splitlines():
+        if line.startswith("@@"):
+            new_line_number = _parse_hunk_start(line)
+            continue
+
+        if new_line_number is None:
+            continue
+
+        if line.startswith("-") and not line.startswith("---"):
+            continue
+        elif line.startswith("\\"):
+            continue
+        else:
+            lines.add(new_line_number)
             new_line_number += 1
 
     return lines

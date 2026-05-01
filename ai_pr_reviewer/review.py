@@ -49,7 +49,7 @@ Return strict JSON only. Do not wrap the JSON in Markdown. Use this exact shape:
   ]
 }
 
-Each finding must reference a changed added line from the diff. Keep each message under 500 characters."""
+Each finding must reference a line visible in the diff (context or added line in the new file). Use the line number as it appears in the new file. Keep each message under 500 characters."""
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ Review the pull request diff below and return the JSON review result described b
 </task>
 
 <line_number_rules>
-Use only file paths and added line numbers from this diff. Inline comments that refer to deleted, unchanged, or unavailable lines will be discarded.
+Use only file paths and line numbers visible in this diff (context or added lines in the new file). If the issue is caused by a deletion, reference the nearest context or added line that best locates the problem. Inline comments that refer to deleted lines or lines not present in the diff will be discarded.
 </line_number_rules>
 
 <diff>
@@ -129,11 +129,11 @@ def parse_review_response(content: str) -> ReviewResult:
 
 
 def filter_findings_for_changed_lines(result: ReviewResult, files: list[PullRequestFile]) -> ReviewResult:
-    changed_lines_by_file = {file.filename: file.changed_lines for file in files}
+    diff_lines_by_file = {file.filename: file.diff_lines for file in files}
     filtered = [
         finding
         for finding in result.findings
-        if finding.path in changed_lines_by_file and finding.line in changed_lines_by_file[finding.path]
+        if finding.path in diff_lines_by_file and finding.line in diff_lines_by_file[finding.path]
     ]
     return ReviewResult(summary=result.summary, findings=filtered)
 
